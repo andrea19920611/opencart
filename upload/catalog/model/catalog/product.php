@@ -77,6 +77,20 @@ class ModelCatalogProduct extends Model {
 		} else {
 			$sql .= " FROM " . DB_PREFIX . "product p";
 		}
+		
+		$sort_data = array(
+			'pd.name',
+			'p.model',
+			'p.quantity',
+			'p.price',
+			'rating',
+			'p.sort_order',
+			'p.date_added'
+		);
+
+		if (isset($data['sort']) && in_array($data['sort'], $sort_data) && $data['sort'] == 'p.price') {
+			$sql .= " LEFT JOIN " . DB_PREFIX . "tax_rule tru ON tru.tax_class_id = p.tax_class_id LEFT JOIN " . DB_PREFIX . "tax_rate_to_customer_group tra2cg ON tra2cg.tax_rate_id = tru.tax_rate_id AND tra2cg.customer_group_id = '" . (int) $this->config->get('config_customer_group_id') . "' LEFT JOIN " . DB_PREFIX . "tax_rate tra ON tra.tax_rate_id = tra2cg.tax_rate_id";
+		}
 
 		$sql .= " LEFT JOIN " . DB_PREFIX . "product_description pd ON (p.product_id = pd.product_id) LEFT JOIN " . DB_PREFIX . "product_to_store p2s ON (p.product_id = p2s.product_id) WHERE pd.language_id = '" . (int)$this->config->get('config_language_id') . "' AND p.status = '1' AND p.date_available <= NOW() AND p2s.store_id = '" . (int)$this->config->get('config_store_id') . "'";
 
@@ -158,21 +172,13 @@ class ModelCatalogProduct extends Model {
 
 		$sql .= " GROUP BY p.product_id";
 
-		$sort_data = array(
-			'pd.name',
-			'p.model',
-			'p.quantity',
-			'p.price',
-			'rating',
-			'p.sort_order',
-			'p.date_added'
-		);
-
 		if (isset($data['sort']) && in_array($data['sort'], $sort_data)) {
 			if ($data['sort'] == 'pd.name' || $data['sort'] == 'p.model') {
 				$sql .= " ORDER BY LCASE(" . $data['sort'] . ")";
 			} elseif ($data['sort'] == 'p.price') {
-				$sql .= " ORDER BY (CASE WHEN special IS NOT NULL THEN special WHEN discount IS NOT NULL THEN discount ELSE p.price END)";
+				$sql .= " ORDER BY (CASE WHEN tra.type = 'P' THEN (CASE WHEN special IS NOT NULL THEN special WHEN discount IS NOT NULL THEN discount ELSE p.price END) * ( 1 + (tra.rate/100) )";
+				$sql .= " WHEN tra.type = 'F' THEN (CASE WHEN special IS NOT NULL THEN special WHEN discount IS NOT NULL THEN discount ELSE p.price END) + tra.rate";
+				$sql .= " ELSE (CASE WHEN special IS NOT NULL THEN special WHEN discount IS NOT NULL THEN discount ELSE p.price END) END)";
 			} else {
 				$sql .= " ORDER BY " . $data['sort'];
 			}
@@ -226,6 +232,10 @@ class ModelCatalogProduct extends Model {
 		if (isset($data['sort']) && in_array($data['sort'], $sort_data)) {
 			if ($data['sort'] == 'pd.name' || $data['sort'] == 'p.model') {
 				$sql .= " ORDER BY LCASE(" . $data['sort'] . ")";
+			} elseif ($data['sort'] == 'ps.price') {
+				$sql .= " ORDER BY (CASE WHEN tra.type = 'P' THEN ps.price * ( 1 + (tra.rate/100) )";
+				$sql .= " WHEN tra.type = 'F' THEN ps.price + tra.rate";
+				$sql .= " ELSE ps.price END)";
 			} else {
 				$sql .= " ORDER BY " . $data['sort'];
 			}
